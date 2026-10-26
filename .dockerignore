@@ -1,0 +1,11 @@
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+**/coverage
+.git
+.github
+android
+web
+docs
+backend/tests

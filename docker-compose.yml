@@ -1,0 +1,41 @@
+# Entorno local completo: MySQL + API.
+#   docker compose up -d --build
+#   docker compose exec api npm run db:setup     # crea tablas, procedimientos y datos de prueba
+#   cd web && npm run dev                         # la web en http://localhost:5173
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_local}
+      MYSQL_DATABASE: cletaeats
+      MYSQL_USER: cletaeats
+      MYSQL_PASSWORD: ${DB_PASSWORD:-cletaeats_local}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --log-bin-trust-function-creators=1
+    ports: ['127.0.0.1:3306:3306']
+    volumes: [db-data:/var/lib/mysql]
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1']
+      interval: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      NODE_ENV: development
+      DB_HOST: db
+      DB_USER: cletaeats
+      DB_PASSWORD: ${DB_PASSWORD:-cletaeats_local}
+      DB_NAME: cletaeats
+      JWT_SECRET: ${JWT_SECRET:-solo-para-desarrollo-local-cambiar-en-produccion}
+      CORS_ORIGINS: http://localhost:5173
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@cletaeats.local}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
+    ports: ['127.0.0.1:3000:3000']
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:

@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">CletaEats</string>
+    <string name="app_tagline">Delivery Heredia</string>
+    <string name="no_connection">Sin conexión — mostrando último dato conocido</string>
+    <string name="error_network">Sin conexión al servidor</string>
+    <string name="retry">Reintentar</string>
+</resources>

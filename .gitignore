@@ -1,0 +1,37 @@
+# ── Secretos: nunca se suben ─────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.jks
+*.keystore
+serviceAccountKey.json
+google-services.json
+local.properties
+
+# ── Node ─────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+coverage/
+
+# ── Web ──────────────────────────────────────────────────
+web/dist/
+
+# ── Android ──────────────────────────────────────────────
+android/.gradle/
+android/build/
+android/app/build/
+android/app/release/
+android/.kotlin/
+android/captures/
+*.apk
+*.aab
+
+# ── Editores y sistema ───────────────────────────────────
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.iml
+.DS_Store
+Thumbs.db
