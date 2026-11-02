@@ -59,7 +59,6 @@ export default function Login() {
       footer={(
         <>
           <p>¿No tenés cuenta? <Link to={`/registro${next ? `?next=${encodeURIComponent(next)}` : ''}`} className="font-semibold text-brand-700 underline underline-offset-2">Creá una</Link></p>
-          <p>¿Querés repartir? <Link to="/repartidores" className="font-semibold text-brand-700 underline underline-offset-2">Aplicá como repartidor</Link></p>
         </>
       )}
     >
