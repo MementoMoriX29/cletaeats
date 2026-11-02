@@ -5,6 +5,7 @@ import L from 'leaflet';
 import type { Point } from '../../lib/types';
 import { courierIcon, homeIcon, restaurantIcon } from './markers';
 import { HEREDIA, TILE_ATTRIBUTION, TILE_URL } from './tiles';
+import { AutoResize } from './AutoResize';
 
 export interface MapPoint extends Point {
   kind: 'restaurant' | 'home' | 'courier';
@@ -52,6 +53,7 @@ export function MapView({ points, route = true, className = 'h-72' }: MapViewPro
           </Marker>
         ))}
         <FitBounds points={points} />
+        <AutoResize />
       </MapContainer>
     </div>
   );
