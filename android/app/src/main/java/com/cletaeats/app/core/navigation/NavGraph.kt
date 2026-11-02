@@ -157,9 +157,15 @@ fun CletaEatsNavGraph() {
                 val role = backStack.arguments?.getString("role") ?: "cliente"
                 RegisterScreen(
                     role = role,
-                    onRegisterSuccess = {
-                        navController.navigate(Screen.Login.route) {
-                            popUpTo(Screen.Register.route) { inclusive = true }
+                    onRegisterSuccess = { registeredRole ->
+                        if (registeredRole == "cliente") {
+                            // La cuenta nueva queda con la sesión iniciada
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(Screen.Login.route) { inclusive = true }
+                            }
+                        } else {
+                            // Solicitud de repartidor: vuelve al inicio de sesión mientras soporte la revisa
+                            navController.popBackStack()
                         }
                     },
                     onBack = { navController.popBackStack() }

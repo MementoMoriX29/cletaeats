@@ -12,4 +12,17 @@ export default defineConfig({
       '/socket.io': { target: API_TARGET, ws: true },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Librerías en archivos aparte: cambian poco, así el navegador las reutiliza entre versiones
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-dom/client', 'react-router-dom'],
+          data: ['@tanstack/react-query', 'axios', 'socket.io-client'],
+          map: ['leaflet', 'react-leaflet'],
+          charts: ['recharts'],
+        },
+      },
+    },
+  },
 })
