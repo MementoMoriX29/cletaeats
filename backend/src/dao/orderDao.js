@@ -1,68 +1,41 @@
-const pool = require('../config/db');
-
-const _rows = async (sql, params = []) => {
-  const [results] = await pool.query(sql, params);
-  return [results[0], []];
-};
-
-const findById     = (id)       => _rows('CALL sp_get_order_by_id(?)', [id]);
-const findByClient = (clientId) => _rows('CALL sp_list_orders_by_client(?)', [clientId]);
-
-const insert = async ({ client_id, restaurant_id, delivery_person_id, distance_km, is_holiday, delivery_address, notes }) => {
-  const [results] = await pool.query(
-    'CALL sp_create_order(?,?,?,?,?,?,?)',
-    [client_id, restaurant_id, delivery_person_id ?? null, distance_km, is_holiday ? 1 : 0,
-     delivery_address ?? null, notes ?? null]
-  );
-  return [{ insertId: results[0][0].insertId, affectedRows: 1 }, []];
-};
-
-const insertItem = async (orderId, comboId, quantity) => {
-  await pool.query('CALL sp_add_order_item(?,?,?)', [orderId, comboId, quantity]);
-};
-
-const findItems = (orderId) => _rows('CALL sp_list_order_items(?)', [orderId]);
-
-const updateStatus = async (id, status) => {
-  const [results] = await pool.query('CALL sp_update_order_status(?,?)', [id, status]);
-  return [{ affectedRows: results[0][0].affectedRows }, []];
-};
-
-const insertInvoice = async ({ order_id, subtotal, transport_cost, iva, total }) => {
-  const [results] = await pool.query(
-    'CALL sp_create_invoice(?,?,?,?,?)',
-    [order_id, subtotal, transport_cost, iva, total]
-  );
-  return [{ insertId: results[0][0].insertId, affectedRows: 1 }, []];
-};
-
-const findInvoice              = (orderId)          => _rows('CALL sp_get_invoice(?)', [orderId]);
-const findOrdersByClient       = ()                  => _rows('CALL sp_report_orders_by_client()');
-const findPeakHours            = ()                  => _rows('CALL sp_report_peak_hours()');
-const findDeliveriesByPerson   = (deliveryPersonId)  => _rows('CALL sp_list_deliveries_by_delivery_person(?)', [deliveryPersonId]);
-
-const findActiveByDeliveryPerson = async (deliveryPersonId) => {
-  const [results] = await pool.query(
-    `SELECT o.*, r.name AS restaurant_name, r.address AS restaurant_address,
-            r.latitude AS restaurant_latitude, r.longitude AS restaurant_longitude,
-            c.name AS client_name
-     FROM client_order o
-     JOIN restaurant r ON o.restaurant_id = r.id
-     JOIN client     c ON o.client_id     = c.id
-     WHERE o.delivery_person_id = ?
-       AND o.status NOT IN ('delivered', 'suspended')
-     ORDER BY o.placed_at DESC
-     LIMIT 1`,
-    [deliveryPersonId]
-  );
-  return [results, []];
-};
+// Pedidos: creación, consultas y cambios de estado.
+const db = require('../config/db');
 
 module.exports = {
-  findById, findByClient,
-  insert, insertItem, findItems,
-  updateStatus,
-  insertInvoice, findInvoice,
-  findOrdersByClient, findPeakHours,
-  findDeliveriesByPerson, findActiveByDeliveryPerson,
+  create: (o) => db.callOne('sp_order_create', [
+    o.clientId, o.restaurantId, JSON.stringify(o.items),
+    o.delivery.line, o.delivery.details, o.delivery.lat, o.delivery.lng,
+    o.notes, o.quote.distance_km,
+    o.quote.subtotal, o.quote.iva_included, o.quote.delivery_fee, o.quote.service_fee, o.quote.tip, o.quote.total,
+    o.quote.is_holiday,
+    o.payment.method, o.payment.card_brand, o.payment.card_last4, o.payment.sinpe_reference,
+    o.payment.cash_change_for,
+  ]),
+
+  async get(id) {
+    const [[order], items, incidents] = await db.callSets('sp_order_get', [id]);
+    return order ? { order, items, incidents } : null;
+  },
+
+  listByClient: (clientId) => db.call('sp_order_list_by_client', [clientId]),
+  listByRestaurant: (restaurantId, active) => db.call('sp_order_list_by_restaurant', [restaurantId, active]),
+  listOffers: () => db.call('sp_order_list_offers'),
+  activeForCourier: (courierId) => db.callOne('sp_order_active_for_courier', [courierId]),
+  listByCourier: (courierId) => db.call('sp_order_list_by_courier', [courierId]),
+  listAdmin: (filter, limit) => db.call('sp_order_list_admin', [filter, limit]),
+
+  cancelByClient: (id, clientId, reason) => db.callSets('sp_order_cancel_by_client', [id, clientId, reason]),
+  accept: (id, restaurantId, prepMinutes) => db.callSets('sp_order_accept', [id, restaurantId, prepMinutes]),
+  reject: (id, restaurantId, reason) => db.callSets('sp_order_reject', [id, restaurantId, reason]),
+  markReady: (id, restaurantId) => db.callSets('sp_order_mark_ready', [id, restaurantId]),
+  claim: (id, courierId) => db.callSets('sp_order_claim', [id, courierId]),
+  pickup: (id, courierId) => db.callSets('sp_order_pickup', [id, courierId]),
+  deliver: (id, courierId) => db.callSets('sp_order_deliver', [id, courierId]),
+  cancelByAdmin: (id, reason) => db.callSets('sp_order_cancel_by_admin', [id, reason]),
+
+  listExpired: (minutes) => db.call('sp_order_list_expired', [minutes]),
+  expire: async (id) => Boolean((await db.callOne('sp_order_expire', [id]))?.expired),
+
+  rate: (id, clientId, { courier_stars, restaurant_stars, comment }) =>
+    db.callSets('sp_order_rate', [id, clientId, courier_stars, restaurant_stars, comment]),
 };

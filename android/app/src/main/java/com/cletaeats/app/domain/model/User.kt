@@ -4,6 +4,7 @@ data class User(
     val id: Int,
     val nombre: String,
     val email: String,
-    val role: String,       // "cliente" | "repartidor"
-    val telefono: String? = null
+    val role: String,              // "cliente" | "repartidor"
+    val telefono: String? = null,
+    val estado: String = "active"  // "active" | "pending" | "rejected" | "suspended"
 )

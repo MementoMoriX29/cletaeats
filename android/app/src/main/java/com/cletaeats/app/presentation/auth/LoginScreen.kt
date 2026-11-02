@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cletaeats.app.core.utils.UiState
-import com.cletaeats.app.domain.model.User
 import com.cletaeats.app.ui.theme.*
 
 /**
@@ -31,15 +30,19 @@ import com.cletaeats.app.ui.theme.*
  * Esto contrasta con React donde el estado y la lógica suelen coexistir
  * en el mismo componente (useState + fetch directo).
  *
+ * Un solo login para todos: no se elige "soy cliente / soy repartidor". El rol sale de la cuenta
+ * y la navegación lleva a cada quien a su inicio.
+ *
  * Validaciones client-side antes de hacer el request:
  * - Email con formato válido
- * - Password mínimo 6 caracteres
+ * - Contraseña no vacía
  * - Botón deshabilitado durante carga
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     onLoginSuccess: (role: String) -> Unit,
+    // "cliente" para crear una cuenta, "repartidor" para enviar una solicitud
     onNavigateToRegister: (role: String) -> Unit,
     viewModel: AuthViewModel = viewModel()
 ) {
@@ -48,7 +51,6 @@ fun LoginScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
-    var selectedRole by remember { mutableStateOf("cliente") }
 
     // Errores de validación locales
     var emailError by remember { mutableStateOf<String?>(null) }
@@ -82,25 +84,19 @@ fun LoginScreen(
         ) {
             // Logo / Header
             Text("CletaEats", style = MaterialTheme.typography.headlineLarge, color = Primary)
-            Text("Delivery Heredia", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+            Text("Comida de Heredia, en bici", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
 
             Spacer(Modifier.height(48.dp))
 
-            // Selector de rol
-            Text("Soy...", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                RoleChip("Cliente", selectedRole == "cliente") { selectedRole = "cliente" }
-                RoleChip("Repartidor", selectedRole == "repartidor") { selectedRole = "repartidor" }
-            }
+            Text("Iniciá sesión", style = MaterialTheme.typography.titleLarge, color = TextPrimary)
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(24.dp))
 
             // Campo email
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it; emailError = null },
-                label = { Text("Correo electrónico") },
+                label = { Text("Correo") },
                 leadingIcon = { Icon(Icons.Filled.Email, null) },
                 isError = emailError != null,
                 supportingText = { emailError?.let { Text(it, color = Error) } },
@@ -148,7 +144,7 @@ fun LoginScreen(
                     if (validateLoginForm(email, password,
                             onEmailError = { emailError = it },
                             onPasswordError = { passwordError = it })) {
-                        viewModel.login(email.trim(), password, selectedRole)
+                        viewModel.login(email.trim(), password)
                     }
                 },
                 enabled = !isLoading,
@@ -162,35 +158,21 @@ fun LoginScreen(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Iniciar Sesión", style = MaterialTheme.typography.titleMedium)
+                    Text("Ingresar", style = MaterialTheme.typography.titleMedium)
                 }
             }
 
             Spacer(Modifier.height(16.dp))
 
-            // Link a registro
-            TextButton(onClick = { onNavigateToRegister(selectedRole) }) {
-                Text(
-                    "¿No tienes cuenta? Regístrate aquí",
-                    color = Primary,
-                    textAlign = TextAlign.Center
-                )
+            // Registro de clientes y solicitud para repartir
+            TextButton(onClick = { onNavigateToRegister("cliente") }) {
+                Text("¿No tenés cuenta? Creá una", color = Primary, textAlign = TextAlign.Center)
+            }
+            TextButton(onClick = { onNavigateToRegister("repartidor") }) {
+                Text("¿Querés repartir? Enviá tu solicitud", color = TextSecondary, textAlign = TextAlign.Center)
             }
         }
     }
-}
-
-@Composable
-private fun RoleChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(label) },
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = Primary.copy(alpha = 0.2f),
-            selectedLabelColor = Primary
-        )
-    )
 }
 
 private fun validateLoginForm(
@@ -203,8 +185,8 @@ private fun validateLoginForm(
         onEmailError("Ingresá un correo válido")
         valid = false
     }
-    if (password.length < 6) {
-        onPasswordError("La contraseña debe tener al menos 6 caracteres")
+    if (password.isBlank()) {
+        onPasswordError("Ingresá tu contraseña")
         valid = false
     }
     return valid

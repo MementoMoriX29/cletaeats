@@ -2,23 +2,63 @@
 @tailwind components;
 @tailwind utilities;
 
-* {
-  box-sizing: border-box;
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+    font-feature-settings: 'tnum' 0;
+  }
+
+  #root {
+    min-height: 100dvh;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-white;
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
 }
 
-body {
-  margin: 0;
-  background-color: #121212;
-  color: #ffffff;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  -webkit-font-smoothing: antialiased;
+@layer components {
+  /* Cifras que se comparan (precios, totales): mismo ancho para cada dígito */
+  .money {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }
 
-#root {
-  min-height: 100vh;
-}
-
-/* Forzar estilos oscuros en Leaflet */
+/* Mapas */
 .leaflet-container {
-  background: #1a1a1a;
+  @apply bg-canvas font-sans;
+  z-index: 0;
+}
+.leaflet-control-attribution {
+  font-size: 10px !important;
+}
+.map-pin {
+  background: none;
+  border: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

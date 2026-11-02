@@ -3,10 +3,12 @@ const http = require('http');
 const env  = require('./config/env');
 const db   = require('./config/db');
 const { app }          = require('./app');
-const { attachSocket } = require('./socket/trackingSocket');
+const { attachSocket } = require('./realtime/socket');
+const expirePendingOrders = require('./jobs/expirePendingOrders');
 
 const httpServer = http.createServer(app);
 const io = attachSocket(httpServer);
+const expireTimer = expirePendingOrders.start();
 
 httpServer.listen(env.port, () => {
   console.log(`CletaEats API escuchando en el puerto ${env.port} (${env.isProduction ? 'producción' : 'desarrollo'})`);
@@ -14,6 +16,7 @@ httpServer.listen(env.port, () => {
 
 const shutdown = (signal) => {
   console.log(`${signal} recibido, cerrando…`);
+  clearInterval(expireTimer);
   io.close();
   httpServer.close(async () => {
     await db.end().catch(() => {});

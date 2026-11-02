@@ -8,11 +8,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -20,55 +20,53 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.launch
 import com.cletaeats.app.core.utils.UiState
+import com.cletaeats.app.data.repository.AuthRepository
 import com.cletaeats.app.ui.theme.*
-
-private fun String.sinTildes(): String {
-    val nfd = java.text.Normalizer.normalize(this, java.text.Normalizer.Form.NFD)
-    return nfd.replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
-}
+import kotlinx.coroutines.launch
 
 /**
- * Pantalla de registro — cliente y repartidor comparten los mismos 7 campos:
- * national_id, name, email, password, address, phone, card_number.
- * El parámetro [role] solo determina qué endpoint se llama.
+ * Registro.
+ * - [role] "cliente": cuenta para pedir (nombre, correo, teléfono y contraseña). Queda con la sesión iniciada.
+ * - [role] "repartidor": solicitud para repartir; suma cédula y vehículo. Soporte la revisa antes de habilitarla.
+ * Las direcciones de entrega y el pago se piden al hacer el pedido, no al crear la cuenta.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterScreen(
     role: String,
-    onRegisterSuccess: () -> Unit,
+    onRegisterSuccess: (role: String) -> Unit,
     onBack: () -> Unit,
     viewModel: AuthViewModel = viewModel()
 ) {
     val registerState by viewModel.registerState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val isCourier = role == AuthRepository.ROLE_REPARTIDOR
 
-    var cedula by remember { mutableStateOf("") }
     var nombre by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var direccion by remember { mutableStateOf("") }
     var telefono by remember { mutableStateOf("") }
-    var tarjeta by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var cedula by remember { mutableStateOf("") }
+    var vehiculo by remember { mutableStateOf("bicicleta") }
     var passwordVisible by remember { mutableStateOf(false) }
 
-    var cedulaError by remember { mutableStateOf<String?>(null) }
     var nombreError by remember { mutableStateOf<String?>(null) }
     var emailError by remember { mutableStateOf<String?>(null) }
+    var telefonoError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
-    var confirmPasswordError by remember { mutableStateOf<String?>(null) }
-    var tarjetaError by remember { mutableStateOf<String?>(null) }
+    var cedulaError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(registerState) {
         when (val state = registerState) {
             is UiState.Success -> {
-                snackbarHostState.showSnackbar("Registro exitoso. Inicia sesión.")
                 viewModel.resetState()
-                onRegisterSuccess()
+                if (state.data.estado != "active") {
+                    // Solicitud de repartidor: se avisa y se vuelve al inicio de sesión
+                    snackbarHostState.showSnackbar(AuthRepository.applicationMessage(state.data.estado))
+                }
+                onRegisterSuccess(state.data.role)
             }
             is UiState.Error -> snackbarHostState.showSnackbar(state.message)
             else -> {}
@@ -79,7 +77,7 @@ fun RegisterScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text(if (role == "repartidor") "Registro Repartidor" else "Registro Cliente") },
+                title = { Text(if (isCourier) "Repartí con CletaEats" else "Creá tu cuenta") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Regresar")
@@ -98,15 +96,14 @@ fun RegisterScreen(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            RegisterField(
-                label = "Cédula",
-                value = cedula,
-                icon = Icons.Filled.Badge,
-                error = cedulaError,
-                onValueChange = { cedula = it; cedulaError = null },
-                keyboardType = KeyboardType.Number
+            Text(
+                if (isCourier) "Llevá pedidos de restaurantes de tu zona. Soporte revisa tu solicitud y te habilita la cuenta."
+                else "Para pedir y seguir tus pedidos en tiempo real.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary,
+                modifier = Modifier.fillMaxWidth()
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(20.dp))
 
             RegisterField(
                 label = "Nombre completo",
@@ -118,8 +115,29 @@ fun RegisterScreen(
             )
             Spacer(Modifier.height(12.dp))
 
+            if (isCourier) {
+                RegisterField(
+                    label = "Cédula",
+                    value = cedula,
+                    icon = Icons.Filled.Badge,
+                    error = cedulaError,
+                    supporting = "9 dígitos, o 11–12 si es DIMEX",
+                    onValueChange = { cedula = it; cedulaError = null },
+                    keyboardType = KeyboardType.Number
+                )
+                Spacer(Modifier.height(12.dp))
+
+                Text("Vehículo", style = MaterialTheme.typography.titleSmall, color = TextPrimary, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    VehicleChip("Bicicleta", vehiculo == "bicicleta") { vehiculo = "bicicleta" }
+                    VehicleChip("Scooter", vehiculo == "scooter") { vehiculo = "scooter" }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+
             RegisterField(
-                label = "Correo electrónico",
+                label = "Correo",
                 value = email,
                 icon = Icons.Filled.Email,
                 error = emailError,
@@ -129,90 +147,53 @@ fun RegisterScreen(
             Spacer(Modifier.height(12.dp))
 
             RegisterField(
-                label = "Dirección",
-                value = direccion,
-                icon = Icons.Filled.Home,
-                error = null,
-                onValueChange = { direccion = it },
-                keyboardType = KeyboardType.Text
-            )
-            Spacer(Modifier.height(12.dp))
-
-            RegisterField(
                 label = "Teléfono",
                 value = telefono,
                 icon = Icons.Filled.Phone,
-                error = null,
-                onValueChange = { telefono = it },
+                error = telefonoError,
+                supporting = if (isCourier) null else "El repartidor te llama a este número si hace falta",
+                onValueChange = { telefono = it; telefonoError = null },
                 keyboardType = KeyboardType.Phone
             )
             Spacer(Modifier.height(12.dp))
 
-            RegisterField(
-                label = "Número de tarjeta",
-                value = tarjeta,
-                icon = Icons.Filled.CreditCard,
-                error = tarjetaError,
-                onValueChange = { tarjeta = it; tarjetaError = null },
-                keyboardType = KeyboardType.Number
-            )
-            Spacer(Modifier.height(12.dp))
-
-            // Contraseña
             OutlinedTextField(
                 value = password,
-                onValueChange = { password = it.sinTildes(); passwordError = null },
+                onValueChange = { password = it; passwordError = null },
                 label = { Text("Contraseña") },
                 leadingIcon = { Icon(Icons.Filled.Lock, null) },
                 trailingIcon = {
                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
                         Icon(
                             if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                            null
+                            contentDescription = if (passwordVisible) "Ocultar contraseña" else "Mostrar contraseña"
                         )
                     }
                 },
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 isError = passwordError != null,
-                supportingText = { passwordError?.let { Text(it, color = Error) } },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
-                modifier = Modifier.fillMaxWidth(),
-                colors = registerFieldColors()
-            )
-            Spacer(Modifier.height(12.dp))
-
-            // Confirmar contraseña
-            OutlinedTextField(
-                value = confirmPassword,
-                onValueChange = { confirmPassword = it.sinTildes(); confirmPasswordError = null },
-                label = { Text("Confirmar contraseña") },
-                leadingIcon = { Icon(Icons.Filled.Lock, null) },
-                visualTransformation = PasswordVisualTransformation(),
-                isError = confirmPasswordError != null,
-                supportingText = { confirmPasswordError?.let { Text(it, color = Error) } },
+                supportingText = { Text(passwordError ?: "Al menos 8 caracteres", color = if (passwordError != null) Error else TextSecondary) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                 modifier = Modifier.fillMaxWidth(),
                 colors = registerFieldColors()
             )
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(28.dp))
 
             val isLoading = registerState is UiState.Loading
             Button(
                 onClick = {
-                    val formValid = validateForm(
-                        cedula, nombre, email, password, confirmPassword, tarjeta,
-                        { cedulaError = it }, { nombreError = it }, { emailError = it },
-                        { passwordError = it }, { confirmPasswordError = it }, { tarjetaError = it }
+                    val valid = validateForm(
+                        isCourier, nombre, email, telefono, password, cedula,
+                        { nombreError = it }, { emailError = it }, { telefonoError = it },
+                        { passwordError = it }, { cedulaError = it }
                     )
-                    if (formValid) {
-                        if (role == "repartidor") {
-                            viewModel.registerRepartidor(nombre, email, password, telefono, direccion, cedula, tarjeta)
-                        } else {
-                            viewModel.registerCliente(nombre, email, password, telefono, direccion, cedula, tarjeta)
-                        }
-                    } else {
+                    if (!valid) {
                         scope.launch { snackbarHostState.showSnackbar("Revisá los campos marcados en rojo") }
+                    } else if (isCourier) {
+                        viewModel.registerRepartidor(nombre.trim(), email.trim(), telefono.trim(), password, cedula.trim(), vehiculo)
+                    } else {
+                        viewModel.registerCliente(nombre.trim(), email.trim(), telefono.trim(), password)
                     }
                 },
                 enabled = !isLoading,
@@ -222,7 +203,7 @@ fun RegisterScreen(
                 if (isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), color = TextPrimary, strokeWidth = 2.dp)
                 } else {
-                    Text("Crear Cuenta", style = MaterialTheme.typography.titleMedium)
+                    Text(if (isCourier) "Enviar solicitud" else "Crear cuenta", style = MaterialTheme.typography.titleMedium)
                 }
             }
         }
@@ -230,22 +211,42 @@ fun RegisterScreen(
 }
 
 @Composable
+private fun VehicleChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = Primary.copy(alpha = 0.2f),
+            selectedLabelColor = Primary
+        )
+    )
+}
+
+@Composable
 private fun RegisterField(
     label: String,
     value: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     error: String?,
     onValueChange: (String) -> Unit,
-    keyboardType: KeyboardType
+    keyboardType: KeyboardType,
+    supporting: String? = null
 ) {
+    val supportText = error ?: supporting
     OutlinedTextField(
         value = value,
-        onValueChange = { onValueChange(it.sinTildes()) },
+        onValueChange = onValueChange,
         label = { Text(label) },
         leadingIcon = { Icon(icon, null) },
         isError = error != null,
-        supportingText = { error?.let { Text(it, color = Error) } },
+        supportingText = if (supportText != null) {
+            { Text(supportText, color = if (error != null) Error else TextSecondary) }
+        } else {
+            null
+        },
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Next),
+        singleLine = true,
         modifier = Modifier.fillMaxWidth(),
         colors = registerFieldColors()
     )
@@ -257,19 +258,20 @@ private fun registerFieldColors() = OutlinedTextFieldDefaults.colors(
     cursorColor = Primary, unfocusedBorderColor = Divider, unfocusedLabelColor = TextSecondary
 )
 
+// Mismas reglas que valida el servidor (el servidor igual revisa todo)
 private fun validateForm(
-    cedula: String, nombre: String, email: String,
-    password: String, confirmPassword: String, tarjeta: String,
-    onCedulaError: (String) -> Unit, onNombreError: (String) -> Unit,
-    onEmailError: (String) -> Unit, onPasswordError: (String) -> Unit,
-    onConfirmError: (String) -> Unit, onTarjetaError: (String) -> Unit
+    isCourier: Boolean, nombre: String, email: String, telefono: String, password: String, cedula: String,
+    onNombreError: (String) -> Unit, onEmailError: (String) -> Unit, onTelefonoError: (String) -> Unit,
+    onPasswordError: (String) -> Unit, onCedulaError: (String) -> Unit
 ): Boolean {
     var valid = true
-    if (cedula.length < 8) { onCedulaError("Mínimo 8 caracteres"); valid = false }
-    if (nombre.length < 2) { onNombreError("Mínimo 2 caracteres"); valid = false }
-    if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) { onEmailError("Correo inválido"); valid = false }
-    if (password.length < 8) { onPasswordError("Mínimo 8 caracteres"); valid = false }
-    if (password != confirmPassword) { onConfirmError("Las contraseñas no coinciden"); valid = false }
-    if (!tarjeta.matches(Regex("\\d{13,19}"))) { onTarjetaError("Solo dígitos, 13–19 caracteres"); valid = false }
+    if (nombre.trim().length < 3) { onNombreError("Ingresá tu nombre completo"); valid = false }
+    if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) { onEmailError("Ingresá un correo válido"); valid = false }
+    val digits = telefono.replace(Regex("[\\s-]"), "").removePrefix("+506")
+    if (!digits.matches(Regex("[245678]\\d{7}"))) { onTelefonoError("Ingresá un teléfono de 8 dígitos"); valid = false }
+    if (password.length < 8) { onPasswordError("La contraseña debe tener al menos 8 caracteres"); valid = false }
+    if (isCourier && !cedula.replace(Regex("[\\s-]"), "").matches(Regex("\\d{9,12}"))) {
+        onCedulaError("La cédula debe tener 9 dígitos (o 11–12 si es DIMEX)"); valid = false
+    }
     return valid
 }

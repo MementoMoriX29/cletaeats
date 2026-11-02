@@ -4,36 +4,27 @@ import com.cletaeats.app.data.remote.dto.*
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
-import retrofit2.http.PUT
 import retrofit2.http.POST
-import retrofit2.http.Path
+import retrofit2.http.PUT
 
 /**
- * Contrato Retrofit para los endpoints de autenticación.
- * Reto de integración RQ-2: el backend Express.js devuelve JWT en la respuesta de login.
- * AuthInterceptor inyecta este token en los headers de las siguientes requests.
+ * Contrato Retrofit de cuentas y sesión.
+ * El backend devuelve un JWT al iniciar sesión o registrarse; AuthInterceptor lo agrega
+ * a las siguientes peticiones. /me siempre responde con la cuenta dueña del token.
  */
 interface AuthApiService {
-    // POST /api/auth/login
     @POST("auth/login")
-    suspend fun login(@Body request: LoginRequest): Response<LoginResponse>
+    suspend fun login(@Body request: LoginRequest): Response<SessionResponse>
 
-    // POST /api/auth/register-client
-    @POST("auth/register-client")
-    suspend fun registerCliente(@Body request: RegisterClienteRequest): Response<MessageResponse>
+    @POST("auth/register")
+    suspend fun register(@Body request: RegisterRequest): Response<SessionResponse>
 
-    // POST /api/auth/register-delivery-person
-    @POST("auth/register-delivery-person")
-    suspend fun registerRepartidor(@Body request: RegisterRepartidorRequest): Response<MessageResponse>
+    @POST("auth/register-courier")
+    suspend fun registerCourier(@Body request: CourierApplicationRequest): Response<SessionResponse>
 
-    // GET /api/clients/:id
-    @GET("clients/{id}")
-    suspend fun getClientProfile(@Path("id") id: Int): Response<ClientProfileResponse>
+    @GET("me")
+    suspend fun getProfile(): Response<UserDto>
 
-    // PUT /api/clients/:id
-    @PUT("clients/{id}")
-    suspend fun updateClientProfile(
-        @Path("id") id: Int,
-        @Body request: UpdateClientRequest
-    ): Response<MessageResponse>
+    @PUT("me")
+    suspend fun updateProfile(@Body request: UpdateProfileRequest): Response<UserDto>
 }

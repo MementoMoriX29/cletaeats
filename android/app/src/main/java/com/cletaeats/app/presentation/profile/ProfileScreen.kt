@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cletaeats.app.core.utils.UiState
-import com.cletaeats.app.data.remote.dto.ClientProfileResponse
+import com.cletaeats.app.data.remote.dto.UserDto
 import com.cletaeats.app.presentation.components.CletaEatsTopBar
 import com.cletaeats.app.presentation.components.LoadingView
 import com.cletaeats.app.ui.theme.*
@@ -67,9 +67,7 @@ fun ProfileScreen(
                         profile = state.data,
                         isLoading = updateState is UiState.Loading,
                         modifier = Modifier.padding(padding),
-                        onSave = { name, phone, address, card ->
-                            viewModel.updateProfile(name, phone, address, card.ifBlank { null }, state.data.email)
-                        },
+                        onSave = { name, phone -> viewModel.updateProfile(name, phone) },
                         onCancel = { editMode = false }
                     )
                 } else {
@@ -90,7 +88,7 @@ fun ProfileScreen(
 
 @Composable
 private fun ViewProfileContent(
-    profile: ClientProfileResponse,
+    profile: UserDto,
     role: String,
     modifier: Modifier,
     onEdit: () -> Unit
@@ -123,15 +121,9 @@ private fun ViewProfileContent(
 
         Spacer(Modifier.height(28.dp))
 
-        ProfileRow(Icons.Filled.Badge,        "Cédula",          profile.nationalId)
-        Divider()
         ProfileRow(Icons.Filled.Email,        "Correo",          profile.email)
         Divider()
         ProfileRow(Icons.Filled.Phone,        "Teléfono",        profile.phone ?: "—")
-        Divider()
-        ProfileRow(Icons.Filled.Home,         "Dirección",       profile.address ?: "—")
-        Divider()
-        ProfileRow(Icons.Filled.CreditCard,   "Tarjeta",         maskCard(profile.cardLast4))
 
         Spacer(Modifier.height(32.dp))
 
@@ -151,20 +143,17 @@ private fun ViewProfileContent(
 
 @Composable
 private fun EditProfileContent(
-    profile: ClientProfileResponse,
+    profile: UserDto,
     isLoading: Boolean,
     modifier: Modifier,
-    onSave: (name: String, phone: String, address: String, card: String) -> Unit,
+    onSave: (name: String, phone: String) -> Unit,
     onCancel: () -> Unit
 ) {
-    var name    by remember { mutableStateOf(profile.name) }
-    var phone   by remember { mutableStateOf(profile.phone ?: "") }
-    var address by remember { mutableStateOf(profile.address ?: "") }
-    // Vacío = conservar la tarjeta actual; solo se envía si se escribe una nueva
-    var card    by remember { mutableStateOf("") }
+    var name  by remember { mutableStateOf(profile.name) }
+    var phone by remember { mutableStateOf(profile.phone ?: "") }
 
-    var nameError by remember { mutableStateOf<String?>(null) }
-    var cardError by remember { mutableStateOf<String?>(null) }
+    var nameError  by remember { mutableStateOf<String?>(null) }
+    var phoneError by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = modifier
@@ -192,26 +181,17 @@ private fun EditProfileContent(
             label = "Teléfono",
             value = phone,
             icon = Icons.Filled.Phone,
+            error = phoneError,
             keyboardType = KeyboardType.Phone,
-            onValueChange = { phone = it }
-        )
-        Spacer(Modifier.height(12.dp))
-        EditField(
-            label = "Dirección",
-            value = address,
-            icon = Icons.Filled.Home,
-            keyboardType = KeyboardType.Text,
-            onValueChange = { address = it }
-        )
-        Spacer(Modifier.height(12.dp))
-        EditField(
-            label = "Nueva tarjeta (actual: ${maskCard(profile.cardLast4)})",
-            value = card,
-            icon = Icons.Filled.CreditCard,
-            error = cardError,
-            keyboardType = KeyboardType.Number,
             imeAction = ImeAction.Done,
-            onValueChange = { card = it; cardError = null }
+            onValueChange = { phone = it; phoneError = null }
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "Para cambiar el correo (${profile.email}) escribinos a soporte.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondary,
+            modifier = Modifier.fillMaxWidth()
         )
 
         Spacer(Modifier.height(32.dp))
@@ -219,9 +199,10 @@ private fun EditProfileContent(
         Button(
             onClick = {
                 var valid = true
-                if (name.length < 2)                      { nameError = "Mínimo 2 caracteres"; valid = false }
-                if (card.isNotEmpty() && !card.matches(Regex("\\d{13,19}"))) { cardError = "Solo dígitos, 13–19 caracteres"; valid = false }
-                if (valid) onSave(name, phone, address, card)
+                if (name.trim().length < 3) { nameError = "Ingresá tu nombre completo"; valid = false }
+                val digits = phone.replace(Regex("[\\s-]"), "").removePrefix("+506")
+                if (!digits.matches(Regex("[245678]\\d{7}"))) { phoneError = "Ingresá un teléfono de 8 dígitos"; valid = false }
+                if (valid) onSave(name.trim(), phone.trim())
             },
             enabled = !isLoading,
             modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -311,7 +292,3 @@ private fun ErrorProfile(message: String, modifier: Modifier, onRetry: () -> Uni
     }
 }
 
-private fun maskCard(last4: String?): String {
-    if (last4.isNullOrBlank()) return "—"
-    return "**** ${last4.takeLast(4)}"
-}

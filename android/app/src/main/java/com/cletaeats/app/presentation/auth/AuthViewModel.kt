@@ -18,9 +18,6 @@ import kotlinx.coroutines.launch
  *
  * viewModelScope: las coroutines se cancelan automáticamente cuando
  * el ViewModel se destruye — evita memory leaks.
- *
- * AndroidViewModel provee acceso a Application para obtener el repositorio
- * sin pasar el contexto directamente (violación de principios de MVVM).
  */
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -29,27 +26,28 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val _loginState = MutableStateFlow<UiState<User>>(UiState.Idle)
     val loginState: StateFlow<UiState<User>> = _loginState.asStateFlow()
 
-    private val _registerState = MutableStateFlow<UiState<String>>(UiState.Idle)
-    val registerState: StateFlow<UiState<String>> = _registerState.asStateFlow()
+    // Al registrarse la sesión queda iniciada (clientes); los repartidores quedan en revisión
+    private val _registerState = MutableStateFlow<UiState<User>>(UiState.Idle)
+    val registerState: StateFlow<UiState<User>> = _registerState.asStateFlow()
 
-    fun login(email: String, password: String, rol: String) {
+    fun login(email: String, password: String) {
         viewModelScope.launch {
             _loginState.value = UiState.Loading
-            _loginState.value = repository.login(email, password, rol)
+            _loginState.value = repository.login(email, password)
         }
     }
 
-    fun registerCliente(nombre: String, email: String, password: String, telefono: String, direccion: String, cedula: String, tarjeta: String) {
+    fun registerCliente(nombre: String, email: String, telefono: String, password: String) {
         viewModelScope.launch {
             _registerState.value = UiState.Loading
-            _registerState.value = repository.registerCliente(nombre, email, password, telefono, direccion, cedula, tarjeta)
+            _registerState.value = repository.registerCliente(nombre, email, telefono, password)
         }
     }
 
-    fun registerRepartidor(nombre: String, email: String, password: String, telefono: String, direccion: String, cedula: String, tarjeta: String) {
+    fun registerRepartidor(nombre: String, email: String, telefono: String, password: String, cedula: String, vehiculo: String) {
         viewModelScope.launch {
             _registerState.value = UiState.Loading
-            _registerState.value = repository.registerRepartidor(nombre, email, password, telefono, direccion, cedula, tarjeta)
+            _registerState.value = repository.registerRepartidor(nombre, email, telefono, password, cedula, vehiculo)
         }
     }
 

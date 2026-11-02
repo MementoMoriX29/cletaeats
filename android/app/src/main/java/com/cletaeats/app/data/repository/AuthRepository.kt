@@ -1,110 +1,102 @@
 package com.cletaeats.app.data.repository
 
+import com.cletaeats.app.core.network.errorMessage
 import com.cletaeats.app.core.session.SessionManager
 import com.cletaeats.app.core.utils.UiState
 import com.cletaeats.app.data.remote.api.AuthApiService
+import com.cletaeats.app.data.remote.dto.CourierApplicationRequest
 import com.cletaeats.app.data.remote.dto.LoginRequest
-import com.cletaeats.app.data.remote.dto.RegisterClienteRequest
-import com.cletaeats.app.data.remote.dto.RegisterRepartidorRequest
+import com.cletaeats.app.data.remote.dto.RegisterRequest
+import com.cletaeats.app.data.remote.dto.SessionResponse
 import com.cletaeats.app.domain.model.User
 import com.cletaeats.app.domain.repository.IAuthRepository
+import retrofit2.Response
 
 /**
  * Patrón Repository: abstrae la fuente de datos de auth.
- * Auth NO tiene caché local (Room) porque las credenciales no se almacenan localmente.
- * La sesión persiste via SessionManager (DataStore) con el JWT.
+ * Auth NO tiene caché local (Room): la sesión persiste con SessionManager (DataStore) y el JWT.
  *
- * RQ-2 (integración con backend Express.js):
- * El backend retorna { token, user } en login. AuthRepository extrae el token,
- * lo persiste en SessionManager y devuelve el modelo de dominio User.
- * Esto desacopla la estructura del backend del resto de la app.
+ * Un solo login para todos los roles: el backend responde { token, user } y el rol sale de la cuenta.
+ * En la app el rol se guarda como "cliente" o "repartidor" (así lo usan la navegación y las pantallas).
+ * Las cuentas de restaurante y de soporte trabajan desde la web.
  */
 class AuthRepository(
     private val apiService: AuthApiService,
     private val sessionManager: SessionManager
 ) : IAuthRepository {
 
-    override suspend fun login(email: String, password: String, rol: String): UiState<User> {
-        return try {
-            val response = apiService.login(LoginRequest(email, password, rol))
-            if (response.isSuccessful) {
-                val body = response.body()!!
-                sessionManager.saveSession(
-                    token = body.token,
-                    userId = body.user.id,
-                    role = body.user.role,
-                    name = body.user.name,
-                    email = body.user.email
-                )
-                UiState.Success(User(
-                    id = body.user.id,
-                    nombre = body.user.name,
-                    email = body.user.email,
-                    role = body.user.role,
-                    telefono = body.user.phone
-                ))
-            } else {
-                val msg = when (response.code()) {
-                    401 -> "Credenciales incorrectas"
-                    403 -> "Acceso no autorizado"
-                    else -> "Error del servidor (${response.code()})"
-                }
-                UiState.Error(msg)
-            }
-        } catch (e: Exception) {
-            UiState.Error("Sin conexión al servidor: ${e.localizedMessage}")
+    override suspend fun login(email: String, password: String): UiState<User> {
+        val result = startSession { apiService.login(LoginRequest(email, password)) }
+        // Un repartidor con la solicitud en revisión o rechazada todavía no puede usar la app
+        if (result is UiState.Success && result.data.role == ROLE_REPARTIDOR && result.data.estado != "active") {
+            return UiState.Error(applicationMessage(result.data.estado))
         }
+        return result
     }
 
     override suspend fun registerCliente(
-        nombre: String, email: String, password: String,
-        telefono: String, direccion: String, cedula: String, tarjeta: String
-    ): UiState<String> {
-        return try {
-            val response = apiService.registerCliente(
-                RegisterClienteRequest(
-                    nationalId = cedula,
-                    name = nombre,
-                    address = direccion,
-                    cardNumber = tarjeta,
-                    phone = telefono,
-                    email = email,
-                    password = password
-                )
-            )
-            if (response.isSuccessful) {
-                UiState.Success(response.body()?.message ?: "Registro exitoso")
-            } else {
-                UiState.Error("Error en el registro (${response.code()})")
-            }
-        } catch (e: Exception) {
-            UiState.Error("Sin conexión: ${e.localizedMessage}")
-        }
+        nombre: String, email: String, telefono: String, password: String
+    ): UiState<User> = startSession {
+        apiService.register(RegisterRequest(name = nombre, email = email, phone = telefono, password = password))
     }
 
     override suspend fun registerRepartidor(
-        nombre: String, email: String, password: String,
-        telefono: String, direccion: String, cedula: String, tarjeta: String
-    ): UiState<String> {
-        return try {
-            val response = apiService.registerRepartidor(
-                RegisterRepartidorRequest(
-                    nationalId = cedula,
-                    name = nombre,
-                    email = email,
-                    password = password,
-                    address = direccion,
-                    phone = telefono,
-                    cardNumber = tarjeta
-                )
+        nombre: String, email: String, telefono: String, password: String, cedula: String, vehiculo: String
+    ): UiState<User> = startSession {
+        apiService.registerCourier(
+            CourierApplicationRequest(
+                name = nombre, email = email, phone = telefono, password = password,
+                nationalId = cedula, vehicle = vehiculo
             )
-            if (response.isSuccessful) {
-                UiState.Success(response.body()?.message ?: "Registro exitoso")
-            } else {
-                UiState.Error("Error en el registro (${response.code()})")
+        )
+    }
+
+    // Llama a la API y, si la cuenta está activa, guarda la sesión que devuelve.
+    private suspend fun startSession(call: suspend () -> Response<SessionResponse>): UiState<User> {
+        return try {
+            val response = call()
+            val body = response.body()
+            if (!response.isSuccessful || body == null) return UiState.Error(response.errorMessage())
+
+            val role = appRole(body.user.role)
+                ?: return UiState.Error("Las cuentas de restaurantes y de soporte se usan desde la web.")
+            val user = User(
+                id = body.user.id,
+                nombre = body.user.name,
+                email = body.user.email,
+                role = role,
+                telefono = body.user.phone,
+                estado = body.user.status
+            )
+            if (user.estado == "active") {
+                sessionManager.saveSession(
+                    token = body.token,
+                    userId = user.id,
+                    role = role,
+                    name = user.nombre,
+                    email = user.email
+                )
             }
+            UiState.Success(user)
         } catch (e: Exception) {
-            UiState.Error("Sin conexión: ${e.localizedMessage}")
+            UiState.Error("No hay conexión con el servidor. Revisá tu internet.")
+        }
+    }
+
+    companion object {
+        const val ROLE_CLIENTE = "cliente"
+        const val ROLE_REPARTIDOR = "repartidor"
+
+        private fun appRole(apiRole: String): String? = when (apiRole) {
+            "client" -> ROLE_CLIENTE
+            "courier" -> ROLE_REPARTIDOR
+            else -> null
+        }
+
+        fun applicationMessage(estado: String): String = when (estado) {
+            "pending" -> "Recibimos tu solicitud. Soporte está revisando tus datos y te avisa cuando tu cuenta esté habilitada."
+            "rejected" -> "Tu solicitud de repartidor no fue aprobada. Escribinos a soporte si tenés dudas."
+            else -> "Tu cuenta no está activa. Contactá a soporte."
         }
     }
 }
